@@ -59,7 +59,12 @@ window.meanings = {};
 
         // Add the meaning to the array of completed correct meanings
         let currentAnswer = $('#user-response').val();
-        window.meanings.currentItem.meanings.add(currentAnswer);
+        let [closestMatchAnswer, didPass] = closestMatch(currentAnswer, $.jStorage.get('currentItem').en);
+        if (didPass) {
+            window.meanings.currentItem.meanings.add(closestMatchAnswer);
+        } else {
+            return false;
+        }
         
         // Check if user is done with current kanji
         let numberOfMeanings = $.jStorage.get('currentItem').en.length;
@@ -84,6 +89,21 @@ window.meanings = {};
         }
         window.meanings.currentItem.obj = item;
         updateInjectedMeaningsScore();
+    }
+
+    function closestMatch(userInput, answers) {
+        let closestAnswer;
+        let closestAnswerScore = Infinity;
+        for (let answer of answers) {
+            let fuzzyMatchScore = levenshteinDistance(answer, userInput);
+            let tolerance = answerChecker.distanceTolerance(answer);
+
+            if (fuzzyMatchScore < closestAnswerScore) {
+                closestAnswer = answer;
+                closestAnswerScore = fuzzyMatchScore;
+            }
+        }
+        return [closestAnswer, closestAnswerScore >= answerChecker.distanceTolerance(closestAnswer)];
     }
 
     function getGurrentItemType() {
