@@ -9,66 +9,86 @@
 // @grant        none
 // ==/UserScript==
 
-window.meanings = {};
+window.wanikaniMultipleMeanings = {};
 
 (function() {
     'use strict';
 
+    /* Eventlistener for when the currentItem changes, which then:
+     *  1. updates the lastItemID and removes the last Eventlistener for the lastItemID
+     *     if the currentItem changed
+     *  2. sets a new evenListener on the currentItemId which then handles the answer process
+     *     , and the wanikaniMultipleMeanings state gets updated with the new currentItem obj
+     *     and we create an empty set for the correctMeanings that track how many meanings the
+     *     user has gotten correct
+     */
     $.jStorage.listenKeyChange('currentItem', () => {
-        let currentItemId = getCurrenItemId();
+        const currentItemId = getCurrenItemId();
 
-        if(currentItemId !== window.meanings.lastItemId) {
-            if (window.meanings.lastItemId !== undefined) {
-               $.jStorage.stopListening(window.meanings.lastItemId); 
+        // If it is a new currenItem then remove the last itemlistener and updated state
+        if(currentItemId !== window.wanikaniMultipleMeanings.lastItemId) {
+            if (window.wanikaniMultipleMeanings.lastItemId !== undefined) {
+               $.jStorage.stopListening(window.wanikaniMultipleMeanings.lastItemId); 
             }
 
-            window.meanings.lastItemId = currentItemId;
+            window.wanikaniMultipleMeanings.lastItemId = currentItemId;
         }
 
         if (getGurrentItemType() === 'kanji' && $.jStorage.get('questionType') === "meaning") {
             $.jStorage.listenKeyChange(currentItemId, () => {
                 if ($.jStorage.get('questionType') === "meaning") {
-                    isAnswerCorrect();
+                    handleAnswer();
                 }
             });
-            window.meanings.currentItem = {
+            window.wanikaniMultipleMeanings.currentItem = {
                 obj: $.jStorage.get(currentItemId),
                 meanings: new Set()
             };
             injectMeaningsScore();
         }
-    })
+    });
 
+    /*
+     * Function to check if value is empty
+     */
     function isEmpty(value) {
       return (typeof value === 'undefined' || value === null);
     }
 
-    function isAnswerCorrect() {
+    /*
+     * Handles the process of a user answer. 
+     * It checks if the answer was a meaning and correct.
+     * It checks what correct meaning the users answer is closest to and adds it to the correct meanings set
+     * (this is to not end up with duplicate answers written incorrect in the set).
+     * It updates the form (remove correct answer stuff) and removes the correct answer update from the state
+     */
+    function handleAnswer() {
         let currentItemId = getCurrenItemId();
         /*
          * item.rc and item.mc => Reading/Meaning Completed (if answered the item correctly)
          * item.ri and item.mi => Reading/Meaning Invalid (number of mistakes before answering correctly)
          */
-        var item = $.jStorage.get(currentItemId) || {};
+        const item = $.jStorage.get(currentItemId) || {};
 
+        const lastItem = window.wanikaniMultipleMeanings.currentItem.obj;
         if (!('mc' in item) || isEmpty(item.mc)) {
             return false;
-        } else if (window.meanings.currentItem.obj && item.mc == window.meanings.currentItem.obj.mc) {
+        } else if (lastItem && item.mc == lastItem.mc) {
             return false;
         }
 
         // Add the meaning to the array of completed correct meanings
-        let currentAnswer = $('#user-response').val();
-        let [closestMatchAnswer, didPass] = closestMatch(currentAnswer, $.jStorage.get('currentItem').en);
+        const currentAnswer = $('#user-response').val();
+        const [closestMatchAnswer, didPass] = closestMatch(currentAnswer, $.jStorage.get('currentItem').en);
         if (didPass) {
-            window.meanings.currentItem.meanings.add(closestMatchAnswer);
+            window.wanikaniMultipleMeanings.currentItem.meanings.add(closestMatchAnswer);
         } else {
             return false;
         }
         
         // Check if user is done with current kanji
-        let numberOfMeanings = $.jStorage.get('currentItem').en.length;
-        if (numberOfMeanings === window.meanings.currentItem.meanings.size) {
+        const numberOfMeanings = $.jStorage.get('currentItem').en.length;
+        if (numberOfMeanings === window.wanikaniMultipleMeanings.currentItem.meanings.size) {
         } else {
             // Remove 1 from the questionCount as it isn't done yet
             $.jStorage.set('questionCount', $.jStorage.get('questionCount') - 1);
@@ -87,16 +107,18 @@ window.meanings = {};
             // Remove the meaning from the input
             $('#user-response').val("");
         }
-        window.meanings.currentItem.obj = item;
+        window.wanikaniMultipleMeanings.currentItem.obj = item;
         updateInjectedMeaningsScore();
     }
 
+    /*
+     * Checks which correct answe the user's answer is closest to and if it passes
+     */
     function closestMatch(userInput, answers) {
         let closestAnswer;
         let closestAnswerScore = Infinity;
         for (let answer of answers) {
-            let fuzzyMatchScore = levenshteinDistance(answer, userInput);
-            let tolerance = answerChecker.distanceTolerance(answer);
+            const fuzzyMatchScore = levenshteinDistance(answer, userInput);
 
             if (fuzzyMatchScore < closestAnswerScore) {
                 closestAnswer = answer;
@@ -106,8 +128,11 @@ window.meanings = {};
         return [closestAnswer, closestAnswerScore >= answerChecker.distanceTolerance(closestAnswer)];
     }
 
+    /*
+     * Returns the itemType of the currentItem
+     */
     function getGurrentItemType() {
-        let currentItem = $.jStorage.get('currentItem');
+        const currentItem = $.jStorage.get('currentItem');
         // Get the current item type
         let currentItemType;
         if (currentItem.rad) {
@@ -120,25 +145,42 @@ window.meanings = {};
         return currentItemType;
     }
 
+    /*
+     * Returns the itemId of the currentItem in the form of <r|v|k><id>
+     */
     function getCurrenItemId() {
-        let currentItem = $.jStorage.get('currentItem');
+        const currentItem = $.jStorage.get('currentItem');
         return getGurrentItemType().charAt(0) + currentItem.id;
     }
 
+    /*
+     * Injects the score counter into wanikani
+     */
     function injectMeaningsScore() {
-        let questionTypeElement = document.getElementById("question-type");
+        const questionTypeElement = document.getElementById("question-type");
 
-        let currentItemId = getCurrenItemId();
+        const currentItemId = getCurrenItemId();
 
-        let meaningsScore = document.createElement('span');
-        meaningsScore.id = "meaningsScore"
-        meaningsScore.textContent = ` (${window.meanings.currentItem ? (window.meanings.currentItem.meanings ? window.meanings.currentItem.meanings.size : 0) : 0}/${$.jStorage.get('currentItem').en.length})`;
+        const meaningsScore = document.createElement('span');
+        meaningsScore.id = "meaningsScore";
+        meaningsScore.textContent = ` (${window.wanikaniMultipleMeanings.currentItem
+            ? (window.wanikaniMultipleMeanings.currentItem.meanings
+                ? window.wanikaniMultipleMeanings.currentItem.meanings.size
+                : 0)
+            : 0}/${$.jStorage.get('currentItem').en.length})`;
 
         questionTypeElement.firstElementChild.appendChild(meaningsScore);
     }
 
+    /*
+     * Updates the injected score counter
+     */
     function updateInjectedMeaningsScore() {
-        let meaningsScore = document.getElementById("meaningsScore");
-        meaningsScore.innerText = ` (${window.meanings.currentItem ? (window.meanings.currentItem.meanings ? window.meanings.currentItem.meanings.size : 0) : 0}/${$.jStorage.get('currentItem').en.length})`;
+        const meaningsScore = document.getElementById("meaningsScore");
+        meaningsScore.innerText = ` (${window.wanikaniMultipleMeanings.currentItem
+            ? (window.wanikaniMultipleMeanings.currentItem.meanings
+                ? window.wanikaniMultipleMeanings.currentItem.meanings.size
+                : 0)
+            : 0}/${$.jStorage.get('currentItem').en.length})`;
     }
 })();
