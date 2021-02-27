@@ -25,6 +25,49 @@ window.wanikaniMultipleMeanings = {};
         return;
     }
 
+    // Set up settings with wkof
+    wkof.include('Menu,Settings');
+    wkof.ready('Menu,Settings').then(install_menu).then(load_settings).then(init);
+
+    function install_menu() {
+        wkof.Menu.insert_script_link({
+            name:      script_name,
+            submenu:   script_name,
+            title:     `Settings`,
+            on_click:  open_settings
+        });
+    }
+
+    function load_settings() {
+        const defaults = {
+          skipButtonDisabled: false,
+        };
+        return wkof.Settings.load(script_name, defaults);
+    }
+
+    function open_settings() {
+        const config = {
+            script_id: script_name,
+            title: script_name,
+            on_save: update_settings,
+            content: {
+                skipButtonDisabled: {
+                    type: 'checkbox',
+                    label: 'Skip buttton disabled',
+                    default: false,
+                }
+            }
+        }
+        const dialog = new wkof.Settings(config);
+        dialog.open();
+    }
+
+    function update_settings() {
+        if (!wkof.settings[script_name].skipButtonDisabled) {
+            injectSkipButton();
+        }
+    }
+
     /* Eventlistener for when the currentItem changes, which then:
      *  1. updates the lastItemID and removes the last Eventlistener for the lastItemID
      *     if the currentItem changed
@@ -265,6 +308,9 @@ window.wanikaniMultipleMeanings = {};
      * function to disable the skip button
      */
     function disableSkipButton() {
+        if (wkof.settings[script_name].skipButtonDisabled) {
+            return false;
+        }
         const newListElement = document.getElementById('option-skip-multiple-meanings');
         newListElement.classList.add('disabled');
     }
@@ -273,13 +319,16 @@ window.wanikaniMultipleMeanings = {};
      * function to enable the skip button
      */
     function enableSkipButton() {
+        if (wkof.settings[script_name].skipButtonDisabled) {
+            return false;
+        }
         const newListElement = document.getElementById('option-skip-multiple-meanings');
         newListElement.classList.remove('disabled');
     }
 
-    function init() {
-        injectSkipButton();
+    function init(settings) {
+        if (!settings.skipButtonDisabled) {
+            injectSkipButton();
+        }
     }
-
-    init();
 })();
