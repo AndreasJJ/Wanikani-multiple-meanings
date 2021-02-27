@@ -14,6 +14,17 @@ window.wanikaniMultipleMeanings = {};
 (function() {
     'use strict';
 
+    //===================================================================
+    // Initialization of the Wanikani Open Framework.
+    //-------------------------------------------------------------------
+    var script_name = 'Wanikani Multiple Meanings';
+    if (!window.wkof) {
+        if (confirm(script_name+' requires Wanikani Open Framework.\nDo you want to be forwarded to the installation instructions?')) {
+            window.location.href = 'https://community.wanikani.com/t/instructions-installing-wanikani-open-framework/28549';
+        }
+        return;
+    }
+
     /* Eventlistener for when the currentItem changes, which then:
      *  1. updates the lastItemID and removes the last Eventlistener for the lastItemID
      *     if the currentItem changed
@@ -85,6 +96,10 @@ window.wanikaniMultipleMeanings = {};
         } else {
             return false;
         }
+
+        if (window.wanikaniMultipleMeanings.currentItem.meanings.size > 0) {
+            enableSkipButton();
+        }
         
         // Check if user is done with current kanji
         const numberOfMeanings = $.jStorage.get('currentItem').en.length;
@@ -125,7 +140,9 @@ window.wanikaniMultipleMeanings = {};
                 closestAnswerScore = fuzzyMatchScore;
             }
         }
-        return [closestAnswer, closestAnswerScore >= answerChecker.distanceTolerance(closestAnswer)];
+        const tolerance = answerChecker.distanceTolerance(closestAnswer);
+        const didPass = closestAnswerScore <= tolerance;
+        return [closestAnswer, didPass];
     }
 
     /*
@@ -183,4 +200,86 @@ window.wanikaniMultipleMeanings = {};
                 : 0)
             : 0}/${$.jStorage.get('currentItem').en.length})`;
     }
+
+    /*
+     * function to inject skip button
+     */
+    function injectSkipButton() {
+        const buttonListParent = document.getElementById('additional-content');
+        const buttonList = buttonListParent.firstElementChild;
+
+        const newListElement = document.createElement('li');
+        const newListElementSpan = document.createElement('span');
+        const newListElementIcon = document.createElement('i');
+
+        newListElement.id = "option-skip-multiple-meanings";
+        newListElementSpan.title = "skip meanings";
+        newListElementIcon.classList.add('icon-forward');
+
+        const button_css = `
+            #additional-content ul li {
+                width: 16.55%;
+            }
+        `;
+
+        newListElementSpan.onclick = () => {
+            if (isButtonDisabled()) {
+                return false;
+            }
+            $('#answer-form fieldset').addClass('correct');
+            $('#user-response').prop("disabled", true);
+            $('#user-response').attr("disabled");
+
+            let currentItemId = getCurrenItemId();
+            const item = $.jStorage.get(currentItemId) || {};
+
+            if (item.mc) {
+                item.mc += 1;
+            } else {
+                item.mc = 1;
+            }
+            
+            $.jStorage.set('questionCount', $.jStorage.get('questionCount') + 1);
+            $.jStorage.set(currentItemId, item);
+
+            disableSkipButton();
+            $('#answer-form fieldset button').click();
+        }
+
+        $('head').append('<style>'+button_css+'</style>');
+        newListElementSpan.appendChild(newListElementIcon);
+        newListElement.appendChild(newListElementSpan);
+        buttonList.appendChild(newListElement);
+        disableSkipButton();
+    }
+
+    /*
+     * function to disable the skip button
+     */
+    function isButtonDisabled() {
+        const newListElement = document.getElementById('option-skip-multiple-meanings');
+        return newListElement.classList.contains('disabled');
+    }
+
+    /*
+     * function to disable the skip button
+     */
+    function disableSkipButton() {
+        const newListElement = document.getElementById('option-skip-multiple-meanings');
+        newListElement.classList.add('disabled');
+    }
+
+    /*
+     * function to enable the skip button
+     */
+    function enableSkipButton() {
+        const newListElement = document.getElementById('option-skip-multiple-meanings');
+        newListElement.classList.remove('disabled');
+    }
+
+    function init() {
+        injectSkipButton();
+    }
+
+    init();
 })();
